@@ -1,30 +1,60 @@
-import { useState, useCallback } from "react";
-import Cropper from "react-easy-crop";
-import getCroppedImg from "../utils/cropImage";
-import "tailwindcss/tailwind.css";
+import { useState, useRef } from "react";
+import ReactCrop from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
+import Image from "next/image";
 
 const ImageUploadAndCrop = ({ onImageCrop }) => {
   const [imageSrc, setImageSrc] = useState(null);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
-
-  const onCropComplete = useCallback((croppedArea, croppedAreaPixels) => {
-    setCroppedAreaPixels(croppedAreaPixels);
-  }, []);
+  const [crop, setCrop] = useState({ aspect: null });
+  const [completedCrop, setCompletedCrop] = useState(null);
+  const imageRef = useRef(null);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImageSrc(reader.result);
-    };
-    reader.readAsDataURL(file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => setImageSrc(reader.result);
+      reader.readAsDataURL(file);
+    }
   };
 
-  const handleCrop = async () => {
-    const croppedImage = await getCroppedImg(imageSrc, croppedAreaPixels);
-    onImageCrop(croppedImage);
+  const handleCropComplete = (crop) => {
+    setCompletedCrop(crop);
+  };
+
+  const handleCrop = () => {
+    if (!completedCrop || !imageRef.current) {
+      return;
+    }
+
+    const image = imageRef.current;
+    const canvas = document.createElement("canvas");
+    const scaleX = image.naturalWidth / image.width;
+    const scaleY = image.naturalHeight / image.height;
+    canvas.width = completedCrop.width;
+    canvas.height = completedCrop.height;
+    const ctx = canvas.getContext("2d");
+
+    ctx.drawImage(
+      image,
+      completedCrop.x * scaleX,
+      completedCrop.y * scaleY,
+      completedCrop.width * scaleX,
+      completedCrop.height * scaleY,
+      0,
+      0,
+      completedCrop.width,
+      completedCrop.height
+    );
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        console.error("Canvas is empty");
+        return;
+      }
+      const croppedImageUrl = URL.createObjectURL(blob);
+      onImageCrop(croppedImageUrl);
+    }, "image/jpeg");
   };
 
   return (
@@ -36,18 +66,15 @@ const ImageUploadAndCrop = ({ onImageCrop }) => {
         className="mb-4"
       />
       {imageSrc && (
-        <div className="relative w-full h-96">
-          <Cropper
-            image={imageSrc}
+        <div className="px-10 max-w-screen-md">
+          <ReactCrop
+            src={imageSrc}
             crop={crop}
-            zoom={zoom}
-            aspect={4 / 3}
-            onCropChange={setCrop}
-            onZoomChange={setZoom}
-            onCropComplete={onCropComplete}
-            cropShape="rect" // You can also set this to 'round' if you want circular cropping
-            showGrid={true} // Show grid for better cropping experience
-          />
+            onChange={(newCrop) => setCrop(newCrop)}
+            onComplete={handleCropComplete}
+          >
+            <Image src={imageSrc} alt="Source" width={700} height={700} />
+          </ReactCrop>
         </div>
       )}
       {imageSrc && (
